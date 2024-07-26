@@ -1,6 +1,7 @@
 import pandas as pd
 from datetime import datetime, timedelta
 from neuralprophet import NeuralProphet
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 def preprocess_data(filepath):
     data = pd.read_csv(filepath)
@@ -45,6 +46,7 @@ def preprocess_data(filepath):
 
     data['FULL_DATETIME_STRT'] = data.apply(lambda row: combine_date_time(row, 'STRTTIME'), axis=1)
     data['FULL_DATETIME_END'] = data.apply(lambda row: combine_date_time(row, 'ENDTIME'), axis=1)
+    
     return data
 
 def prepare_data(df, datetime_column, value_column):
@@ -69,32 +71,67 @@ def convert_yhat1_to_time(yhat1):
     minutes = total_minutes % 60
     hours = hours % 24  # Ensure hours are within 0-23
     return f"{str(hours).zfill(2)}:{str(minutes).zfill(2)}"
+
+def train_test_split(df, train_size=0.8):
+    train_size = int(len(df) * train_size)
+    train_df = df.iloc[:train_size]
+    test_df = df.iloc[train_size:]
+    return train_df, test_df
+
+def evaluate_model(test_df, forecast_df):
+    y_true = test_df['y'].values
+    y_pred = forecast_df['yhat1'].values[:len(y_true)]
+    mae = mean_absolute_error(y_true, y_pred)
+    mse = mean_squared_error(y_true, y_pred)
+    rmse = mse ** 0.5
+    return mae, mse, rmse
+
 if __name__ == "__main__":
     data = preprocess_data('tripv2pub 5.csv')
 
     # Start Time Forecast
-    data_aggregated_start = data.groupby('FULL_DATETIME_STRT').agg({
+    data_aggregated_start = data.groupby('FULLDATE').agg({
         'STRTTIME_OLD': 'first',
-        'ENDTIME_OLD':'first'
+        'ENDTIME_OLD': 'first'
         
     }).reset_index()
-    df_strttime = prepare_data(data_aggregated_start, 'FULL_DATETIME_STRT', 'STRTTIME_OLD')
-    print(df_strttime)
-    model_strttime, forecast_strttime = train_neuralprophet(df_strttime)
-    forecast_next_day_strttime = forecast_next_day(model_strttime, df_strttime)
-    
+    df_strttime = prepare_data(data_aggregated_start, 'FULLDATE', 'STRTTIME_OLD')
+
+    # Train-test split
+    train_df_strttime, test_df_strttime = train_test_split(df_strttime)
+
+    # Train NeuralProphet model
+    model_strttime, _ = train_neuralprophet(train_df_strttime)
+
+    # Forecast on the test set
+    forecast_strttime = model_strttime.predict(test_df_strttime)
+
+    # Evaluate the model
+    mae, mse, rmse = evaluate_model(test_df_strttime, forecast_strttime)
+    print(f'Start Time Forecast - MAE: {mae}, MSE: {mse}, RMSE: {rmse}')
+
+    # Forecast next day
+    forecast_next_day_strttime = forecast_next_day(model_strttime, train_df_strttime)
     forecast_next_day_strttime['start_time_yhat1'] = forecast_next_day_strttime['yhat1'].apply(convert_yhat1_to_time)
     print('Next day Start Time forecast:', forecast_next_day_strttime[['ds', 'start_time_yhat1']])
 
     # End Time Forecast
-    # data_aggregated_end = data.groupby('FULL_DATETIME_END').agg({
-    #     'ENDTIME_OLD': 'first'
-    # }).reset_index()
+    df_endtime = prepare_data(data_aggregated_start, 'FULLDATE', 'ENDTIME_OLD')
 
-    df_endtime = prepare_data(data_aggregated_start, 'FULL_DATETIME_STRT', 'ENDTIME_OLD')
-    model_endtime, forecast_endtime = train_neuralprophet(df_endtime)
-    print(df_endtime)
-    forecast_next_day_endtime = forecast_next_day(model_endtime, df_endtime)
-    
+    # Train-test split
+    train_df_endtime, test_df_endtime = train_test_split(df_endtime)
+
+    # Train NeuralProphet model
+    model_endtime, _ = train_neuralprophet(train_df_endtime)
+
+    # Forecast on the test set
+    forecast_endtime = model_endtime.predict(test_df_endtime)
+
+    # Evaluate the model
+    mae, mse, rmse = evaluate_model(test_df_endtime, forecast_endtime)
+    print(f'End Time Forecast - MAE: {mae}, MSE: {mse}, RMSE: {rmse}')
+
+    # Forecast next day
+    forecast_next_day_endtime = forecast_next_day(model_endtime, train_df_endtime)
     forecast_next_day_endtime['end_time_yhat1'] = forecast_next_day_endtime['yhat1'].apply(convert_yhat1_to_time)
     print('Next day End Time forecast:', forecast_next_day_endtime[['ds', 'end_time_yhat1']])
