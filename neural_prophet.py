@@ -1,11 +1,8 @@
-# neural_prophet.py
-
 import pandas as pd
 from datetime import datetime, timedelta
+from neuralprophet import NeuralProphet
 
 def preprocess_data(filepath):
-    from neuralprophet import NeuralProphet
-
     data = pd.read_csv(filepath)
     data = data[['PERSONID', 'TRIPID', 'TRAVDAY', 'TDAYDATE', 'STRTTIME', 'ENDTIME', 'TRPMILES', 'TRIPPURP', 'WHYFROM', 'WHYTO', 'TRPTRANS']]
     data.sort_values(by='TDAYDATE')
@@ -48,7 +45,6 @@ def preprocess_data(filepath):
 
     data['FULL_DATETIME_STRT'] = data.apply(lambda row: combine_date_time(row, 'STRTTIME'), axis=1)
     data['FULL_DATETIME_END'] = data.apply(lambda row: combine_date_time(row, 'ENDTIME'), axis=1)
-
     return data
 
 def prepare_data(df, datetime_column, value_column):
@@ -57,8 +53,6 @@ def prepare_data(df, datetime_column, value_column):
     return df_prepared
 
 def train_neuralprophet(df_prepared, epochs=100):
-    from neuralprophet import NeuralProphet
-
     model = NeuralProphet(epochs=epochs)
     model.fit(df_prepared, freq='h')
     forecast = model.predict(df_prepared)
@@ -69,13 +63,38 @@ def forecast_next_day(model, df_prepared, periods=10):
     forecast = model.predict(future)
     return forecast
 
+def convert_yhat1_to_time(yhat1):
+    total_minutes = int(yhat1)
+    hours = total_minutes // 60
+    minutes = total_minutes % 60
+    hours = hours % 24  # Ensure hours are within 0-23
+    return f"{str(hours).zfill(2)}:{str(minutes).zfill(2)}"
 if __name__ == "__main__":
     data = preprocess_data('tripv2pub 5.csv')
-    data_aggregated = data.groupby('FULL_DATETIME_STRT').agg({
-        'STRTTIME_OLD': 'first'
-    }).reset_index()
 
-    df_strttime = prepare_data(data_aggregated, 'FULL_DATETIME_STRT', 'STRTTIME_OLD')
+    # Start Time Forecast
+    data_aggregated_start = data.groupby('FULL_DATETIME_STRT').agg({
+        'STRTTIME_OLD': 'first',
+        'ENDTIME_OLD':'first'
+        
+    }).reset_index()
+    df_strttime = prepare_data(data_aggregated_start, 'FULL_DATETIME_STRT', 'STRTTIME_OLD')
+    print(df_strttime)
     model_strttime, forecast_strttime = train_neuralprophet(df_strttime)
     forecast_next_day_strttime = forecast_next_day(model_strttime, df_strttime)
-    print('Next day Start Time forecast:', forecast_next_day_strttime[['ds', 'yhat1']])
+    
+    forecast_next_day_strttime['start_time_yhat1'] = forecast_next_day_strttime['yhat1'].apply(convert_yhat1_to_time)
+    print('Next day Start Time forecast:', forecast_next_day_strttime[['ds', 'start_time_yhat1']])
+
+    # End Time Forecast
+    # data_aggregated_end = data.groupby('FULL_DATETIME_END').agg({
+    #     'ENDTIME_OLD': 'first'
+    # }).reset_index()
+
+    df_endtime = prepare_data(data_aggregated_start, 'FULL_DATETIME_STRT', 'ENDTIME_OLD')
+    model_endtime, forecast_endtime = train_neuralprophet(df_endtime)
+    print(df_endtime)
+    forecast_next_day_endtime = forecast_next_day(model_endtime, df_endtime)
+    
+    forecast_next_day_endtime['end_time_yhat1'] = forecast_next_day_endtime['yhat1'].apply(convert_yhat1_to_time)
+    print('Next day End Time forecast:', forecast_next_day_endtime[['ds', 'end_time_yhat1']])

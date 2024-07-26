@@ -1,5 +1,3 @@
-# database.py
-
 import mysql.connector
 
 def get_connection():
@@ -15,10 +13,10 @@ def insert_predictions(predictions):
     conn = get_connection()
     cursor = conn.cursor()
     
-    insert_query = "INSERT INTO new_table (ds, y_pred) VALUES (%s, %s)"
+    insert_query = "INSERT INTO new_table (ds, start_time_yhat1, end_time_yhat1) VALUES (%s, %s, %s)"
     
     for index, row in predictions.iterrows():
-        cursor.execute(insert_query, (row['ds'], row['yhat1']))
+        cursor.execute(insert_query, (row['ds'], row['start_time_yhat1'], row['end_time_yhat1']))
     
     conn.commit()
     cursor.close()
