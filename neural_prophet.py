@@ -64,7 +64,7 @@ def train_neuralprophet(df_prepared, epochs=100):
     forecast = model.predict(df_prepared)
     return model, forecast
 
-def forecast_next_day(model, df_prepared, periods=10):
+def forecast_next_day(model, df_prepared, periods=20):
     future = model.make_future_dataframe(df_prepared, periods=periods)
     forecast = model.predict(future)
     return forecast
