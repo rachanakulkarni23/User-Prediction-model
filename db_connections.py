@@ -13,7 +13,7 @@ def fetch_data():
     cursor = connection.cursor()
 
     # Execute a query to fetch data
-    query = "SELECT * FROM new_table"
+    query = "SELECT * FROM predictions"
     cursor.execute(query)
 
     # Fetch all the rows from the executed query
